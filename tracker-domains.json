@@ -1,0 +1,34 @@
+{
+  "_comment": "Sample seed list for the hackathon build. Replace with a real pull from Disconnect.me's services.json or EasyList before demo day.",
+  "trackers": [
+    "doubleclick.net",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "googlesyndication.com",
+    "facebook.net",
+    "connect.facebook.net",
+    "scorecardresearch.com",
+    "adnxs.com",
+    "criteo.com",
+    "taboola.com",
+    "outbrain.com",
+    "hotjar.com",
+    "segment.io",
+    "mixpanel.com",
+    "amplitude.com",
+    "branch.io",
+    "adsrvr.org",
+    "quantserve.com",
+    "bluekai.com",
+    "demdex.net"
+  ],
+  "allowlist": [
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+    "recaptcha.net",
+    "gstatic.com",
+    "js.stripe.com",
+    "api.stripe.com",
+    "checkout.stripe.com"
+  ]
+}
