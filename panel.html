@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Privacy Lens</title>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 16px; color: #ddd; background: #1e1f22; }
+      h2 { margin-top: 0; }
+      .controls { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+      select, button { background: #2b2c2f; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+      button { cursor: pointer; }
+      #summary { font-size: 12px; color: #9aa; margin-bottom: 8px; }
+      pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; background: #111; padding: 8px; border-radius: 6px; max-height: 70vh; overflow-y: auto; }
+    </style>
+  </head>
+  <body>
+    <h2>Privacy Lens</h2>
+    <p>Placeholder panel — Person 3's Live Feed / Graph / Score UI goes here.</p>
+    <div class="controls">
+      <select id="categoryFilter">
+        <option value="">All categories</option>
+        <option value="network">network</option>
+        <option value="fingerprinting">fingerprinting</option>
+        <option value="storage">storage</option>
+        <option value="identifier">identifier</option>
+      </select>
+      <select id="subtypeFilter">
+        <option value="">All subtypes</option>
+      </select>
+      <button id="clearBtn">Clear stored events</button>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+    <div id="summary"></div>
+    <pre id="events">loading…</pre>
+    <script src="panel.js"></script>
+  </body>
+</html>
