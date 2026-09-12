@@ -1,0 +1,14 @@
+{
+  "name": "privacy-lens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "test": "node tests/test-hooks.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

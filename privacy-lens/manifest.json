@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Privacy Lens",
+  "version": "0.1.0",
+  "description": "Tracking forensics: see who is tracking you, how, and where the data goes.",
+  "permissions": [
+    "webRequest",
+    "storage",
+    "sidePanel",
+    "declarativeNetRequest",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": ["dist/main-world.bundle.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "matches": ["<all_urls>"]
+    },
+    {
+      "js": ["dist/content-bridge.bundle.js"],
+      "run_at": "document_start",
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "ui/sidepanel.html"
+  },
+  "action": {
+    "default_title": "Privacy Lens"
+  }
+}

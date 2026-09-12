@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TrackerGuard</title>
+
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+
+<body>
+
+    <header class="header">
+
+        <div>
+            <h1>TrackerGuard</h1>
+            <p>Privacy & Tracking Monitor</p>
+        </div>
+
+        <button id="clearBtn">Clear</button>
+
+    </header>
+
+
+    <!-- Current Site -->
+
+    <section class="site-card">
+
+        <div>
+            <span class="label">CURRENT SITE</span>
+            <h2 id="siteName">Waiting...</h2>
+        </div>
+
+        <div class="score">
+            <span id="trackerScore">0</span>
+            <small>Trackers</small>
+        </div>
+
+    </section>
+
+
+    <!-- Statistics -->
+
+    <section class="stats">
+
+        <div class="stat">
+            <span id="totalEvents">0</span>
+            <p>Total Events</p>
+        </div>
+
+        <div class="stat high">
+            <span id="highEvents">0</span>
+            <p>High Risk</p>
+        </div>
+
+        <div class="stat medium">
+            <span id="mediumEvents">0</span>
+            <p>Medium Risk</p>
+        </div>
+
+    </section>
+
+
+    <!-- Filters -->
+
+    <section class="filters">
+
+        <button class="filter active" data-filter="ALL">
+            All
+        </button>
+
+        <button class="filter" data-filter="HIGH">
+            High
+        </button>
+
+        <button class="filter" data-filter="MEDIUM">
+            Medium
+        </button>
+
+        <button class="filter" data-filter="LOW">
+            Low
+        </button>
+
+    </section>
+
+
+    <!-- Live Feed -->
+
+    <section>
+
+        <div class="feed-header">
+
+            <h3>Live Tracking Activity</h3>
+
+            <span id="liveIndicator">
+                ● LIVE
+            </span>
+
+        </div>
+
+        <div id="feed" class="feed">
+
+            <div class="empty">
+                Waiting for tracking activity...
+            </div>
+
+        </div>
+
+    </section>
+    <!-- Per-Site Analysis -->
+
+<section class="site-analysis">
+
+    <div class="feed-header">
+
+        <h3>Per-Site Analysis</h3>
+
+    </div>
+
+    <div id="siteAnalysis">
+
+        <div class="empty">
+            No sites detected yet.
+        </div>
+
+    </div>
+
+</section>
+
+
+    <!-- Export -->
+
+    <section class="export">
+
+        <button id="jsonBtn">
+            Export JSON
+        </button>
+
+        <button id="pdfBtn">
+            Export PDF
+        </button>
+
+    </section>
+
+
+    <script type="module" src="sidepanel.js"></script>
+
+</body>
+</html>
