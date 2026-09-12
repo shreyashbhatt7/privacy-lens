@@ -59,14 +59,26 @@ export function flushBuffer() {
   const batchPayload = buffer.map(({ _key, ...eventData }) => eventData);
   buffer = [];
 
-  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-    chrome.runtime.sendMessage({
-      type: MESSAGE_TYPES.BATCH_EVENTS,
-      payload: batchPayload,
-      events: batchPayload
-    }).catch(() => {
-      // Ignore background worker idle or disconnected port errors in development
-    });
+  // chrome.runtime.sendMessage throws SYNCHRONOUSLY (not a promise rejection)
+  // with "Extension context invalidated" if this page's content script is
+  // still running from a previous load of the extension (e.g. the extension
+  // was reloaded/rebuilt in chrome://extensions while this tab stayed open).
+  // chrome.runtime.id becomes undefined the moment that happens, so check it
+  // up front, and still wrap the call itself in try/catch as a safety net
+  // for the synchronous throw.
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.BATCH_EVENTS,
+        payload: batchPayload,
+        events: batchPayload
+      }).catch(() => {
+        // Ignore background worker idle or disconnected port errors in development
+      });
+    }
+  } catch (err) {
+    // Extension context invalidated mid-flight — nothing to recover here;
+    // this tab will get a valid context back on its next reload.
   }
 }
 

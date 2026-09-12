@@ -15,47 +15,52 @@
 
 import { initInterceptor } from "./network/interceptor.js";
 import { getRegistrableDomain } from "./network/tracker-list.js";
-import { createTrackingEvent } from "./shared/events.js";
 import { MESSAGE_TYPES } from "./shared/constants.js";
-import { appendEvent } from "./lib/store.js";
+import { appendEvent, clearEventsForTab } from "./lib/store.js";
+import { confidenceEngine } from "./detection/confidence-engine.js";
 
 initInterceptor();
 
 chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
 
+// Reset per-tab history and correlation state on every fresh top-level
+// navigation (including a plain reload), so a site's privacy score and
+// evidence chain reflect the CURRENT page load, not every visit to that
+// tab since the browser session started. Without this, pl_events only
+// ever grows, and calculatePrivacyScore() sums the full session history
+// with no decay — so any repeatedly-tested site eventually saturates to F
+// regardless of what the current page is actually doing.
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.frameId !== 0) return; // only top-level frame, not iframes
+  clearEventsForTab(details.tabId).catch((err) =>
+    console.error("[PrivacyLens] failed to clear events for tab", err)
+  );
+  confidenceEngine.resetForTab(details.tabId);
+});
+
 /**
  * Turns one fingerprint draft (from createFingerprintDraft() in
  * shared/events.js, batched by content-bridge.js) into a canonical
- * TrackingEvent. Fills in tabId/site from the message sender (only known
- * here, in the background — the page context that produced the draft has
- * neither) and flattens evidence.details into evidence, per the
- * Option B decision recorded in docs/EVENT_SCHEMA_REFERENCE.md.
+ * TrackingEvent using Person 3's Confidence & Correlation Engine (Phase 24-32).
+ * Fills in tabId/site, correlates signal combinations from the same script,
+ * computes calibrated confidence and severity, and flattens evidence.
  */
 function finalizeFingerprintDraft(draft, topSite, tabId) {
-  const { api, details } = draft.evidence ?? {};
-  const { count, _key, ...rest } = draft; // strip content-bridge's dedup bookkeeping
-
-  return createTrackingEvent({
-    tabId,
-    site: topSite,
-    category: rest.category ?? "fingerprinting",
-    subtype: rest.subtype,
-    source: rest.source,
-    target: rest.target,
-    evidence: {
-      api,
-      ...(details ?? {}),
-      ...(count && count > 1 ? { count } : {}),
-    },
-    severity: rest.severity ?? "low",
-    confidence: rest.confidence ?? 0.0,
-  });
+  return confidenceEngine.evaluateEvent(draft, { topSite, tabId });
 }
 
 async function getTopSiteForSenderTab(tab) {
   try {
     if (!tab?.url) return null;
-    return getRegistrableDomain(new URL(tab.url).hostname);
+    const url = new URL(tab.url);
+    // file:// (and other schemes with no host, e.g. a raw local path) have an
+    // empty hostname — getRegistrableDomain("") returns "", which is falsy
+    // and would otherwise cause every tracker-lab fingerprint event opened
+    // via file:// to be silently dropped as "can't attribute to a site".
+    // Give local files a stable synthetic site label instead so demo runs
+    // against tracker-lab/*.html actually record events.
+    if (url.protocol === "file:") return "local-file";
+    return getRegistrableDomain(url.hostname) || null;
   } catch {
     return null;
   }

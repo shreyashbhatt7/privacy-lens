@@ -20,17 +20,44 @@
 
 import { getAllEvents, clearEvents } from "../lib/store.js";
 import { toDisplayEvent } from "./event-display.js";
+import { correlateCrossLayerBeacons } from "../lib/correlate.js";
+import { renderTrackerGraph } from "./graph.js";
+import { getRegistrableDomain } from "../network/tracker-list.js";
+import { calculatePrivacyScore } from "../detection/scoring.js";
 
 let events = []; // canonical TrackingEvent objects, oldest first
-let currentFilter = "ALL";
+let currentFilter = "ALL"; // severity filter
+let currentCategoryFilter = "ALL"; // category filter
+let demoMode = false;
+let activeTabId = null; // the tab this panel is currently showing (see chrome.tabs.query below)
+
+// NOTE: there used to be a client-side time-window filter here
+// (recentEventsForSite) to stop the privacy score from accumulating
+// forever across a whole browser session. That's no longer needed:
+// background.js now calls clearEventsForTab()/confidenceEngine.resetForTab()
+// on every fresh top-level navigation (chrome.webNavigation.onBeforeNavigate),
+// so pl_events in storage only ever holds each open tab's CURRENT page load.
+// The main/export score is scoped to activeTabId below to match that
+// per-tab design — two tabs on the same site score independently.
+
+// Sites tracker-lab's test pages resolve to (see getTopSiteForTab /
+// getTopSiteForSenderTab fix in background.js + network/interceptor.js):
+// file:// pages (tier1-test.html) get the synthetic "local-file" site,
+// and cache-token.html is served from http://localhost:5051.
+const TRACKER_LAB_SITES = new Set(["local-file", "localhost"]);
 
 const feed = document.getElementById("feed");
 const totalEventsEl = document.getElementById("totalEvents");
 const highEventsEl = document.getElementById("highEvents");
 const mediumEventsEl = document.getElementById("mediumEvents");
 const trackerScoreEl = document.getElementById("trackerScore");
+const privacyScoreEl = document.getElementById("privacyScore");
+const privacyGradeBadgeEl = document.getElementById("privacyGradeBadge");
+const privacyRatingEl = document.getElementById("privacyRating");
 const siteNameEl = document.getElementById("siteName");
 const siteAnalysisEl = document.getElementById("siteAnalysis");
+const trackerGraphEl = document.getElementById("trackerGraph");
+let activeSite = null;
 
 function formatTime(timestamp) {
   if (!timestamp) return "";
@@ -40,8 +67,16 @@ function formatTime(timestamp) {
 function renderFeed() {
   feed.innerHTML = "";
 
-  const display = events.map(toDisplayEvent);
-  const filtered = display.filter((e) => currentFilter === "ALL" || e.severity === currentFilter);
+  // Tag any network-layer + fingerprint-layer sightings of the same
+  // outbound call as cross-layer confirmed before mapping to display —
+  // this is presented as stronger evidence, not deduped/hidden.
+  const correlated = correlateCrossLayerBeacons(events);
+  const display = correlated.map(toDisplayEvent);
+  const filtered = display.filter((e) => {
+    const severityMatch = currentFilter === "ALL" || e.severity === currentFilter;
+    const categoryMatch = currentCategoryFilter === "ALL" || e.raw.category === currentCategoryFilter;
+    return severityMatch && categoryMatch;
+  });
 
   if (filtered.length === 0) {
     feed.innerHTML = `<div class="empty">No tracking activity detected.</div>`;
@@ -53,25 +88,53 @@ function renderFeed() {
     .reverse() // newest first
     .forEach((e) => {
       const card = document.createElement("div");
-      card.className = `event ${e.severity.toLowerCase()}`;
+      const isDemoSite = demoMode && TRACKER_LAB_SITES.has(e.site);
+      card.className = `event ${e.severity.toLowerCase()}${isDemoSite ? " demo-flagged" : ""}`;
+
+      const confidencePct = e.confidence != null ? Math.round(e.confidence * 100) : null;
+      const vectorsHtml = e.correlatedVectors?.length
+        ? `<div class="event-vectors">Vectors: ${e.correlatedVectors.join(" + ")}</div>`
+        : "";
+      const crossLayerBadge = e.crossLayerConfirmed
+        ? `<span class="badge-cross-layer" title="Detected independently at both the network layer and the JavaScript layer">✓ 2-layer confirmed</span>`
+        : "";
+
       card.innerHTML = `
         <div class="event-top">
           <span class="event-type">${e.type}</span>
           <span class="event-time">${formatTime(e.timestamp)}</span>
         </div>
-        <div class="event-domain">${e.domain}</div>
+        <div class="event-domain">${e.domain} ${crossLayerBadge}</div>
+        ${confidencePct != null ? `<div class="event-confidence">${confidencePct}% confidence</div>` : ""}
+        <div class="event-why" hidden>
+          ${e.evidenceSummary ? `<div class="event-summary">${e.evidenceSummary}</div>` : ""}
+          ${vectorsHtml}
+        </div>
       `;
+
+      // Click to expand/collapse the "why we flagged this" detail — collapsed
+      // by default so the feed stays scannable; only shown if there's
+      // something to say (a summary or correlated vectors).
+      const why = card.querySelector(".event-why");
+      if (e.evidenceSummary || vectorsHtml) {
+        card.classList.add("expandable");
+        card.addEventListener("click", () => {
+          why.hidden = !why.hidden;
+        });
+      }
+
       feed.appendChild(card);
     });
 }
 
 function renderSiteAnalysis() {
-  const bySite = new Map(); // site -> { total, high, medium, low }
+  const bySite = new Map(); // site -> { total, high, medium, low, events: [] }
 
   for (const event of events) {
     const site = event.site || "Unknown site";
-    const bucket = bySite.get(site) ?? { total: 0, high: 0, medium: 0, low: 0 };
+    const bucket = bySite.get(site) ?? { total: 0, high: 0, medium: 0, low: 0, events: [] };
     bucket.total += 1;
+    bucket.events.push(event);
     const sev = (event.severity ?? "low").toLowerCase();
     if (sev === "high" || sev === "medium" || sev === "low") bucket[sev] += 1;
     bySite.set(site, bucket);
@@ -86,15 +149,18 @@ function renderSiteAnalysis() {
   // Busiest sites first.
   [...bySite.entries()]
     .sort((a, b) => b[1].total - a[1].total)
-    .forEach(([site, counts]) => {
+    .forEach(([site, data]) => {
+      const siteScore = calculatePrivacyScore(events.filter((e) => e.site === site));
       const row = document.createElement("div");
       row.className = "event"; // reuse the feed card styling for a consistent look
       row.innerHTML = `
         <div class="event-top">
           <span class="event-type">${site}</span>
-          <span class="event-time">${counts.total} event${counts.total === 1 ? "" : "s"}</span>
+          <span class="event-score-pill" style="background: ${siteScore.color}22; color: ${siteScore.color}; border: 1px solid ${siteScore.color}55;">
+            Score ${siteScore.score} · Grade ${siteScore.grade}
+          </span>
         </div>
-        <div class="event-domain">${counts.high} high · ${counts.medium} medium · ${counts.low} low</div>
+        <div class="event-domain">${data.high} high · ${data.medium} medium · ${data.low} low · ${data.total} event${data.total === 1 ? "" : "s"}</div>
       `;
       siteAnalysisEl.appendChild(row);
     });
@@ -108,16 +174,36 @@ function updateDashboard() {
   highEventsEl.textContent = high;
   mediumEventsEl.textContent = medium;
 
-  // Tracker score = number of distinct detection methods seen (category:subtype pairs),
+  // Tracker count = number of distinct detection methods seen (category:subtype pairs),
   // not raw event count — a tracker calling toDataURL() 50 times is one method, not 50.
   const methods = new Set(events.map((e) => `${e.category}:${e.subtype}`));
   trackerScoreEl.textContent = methods.size;
+
+  // Calculate holistic site Privacy Score (0-100 and A-F letter grade).
+  // Scoped to THIS TAB specifically (not just the site name), matching the
+  // per-tab reset in background.js — two tabs open on the same site score
+  // independently, each reflecting only its own current page load.
+  const tabEvents = activeTabId != null ? events.filter((e) => e.tabId === activeTabId) : events;
+  const privacyResult = calculatePrivacyScore(tabEvents);
+
+  if (privacyScoreEl) {
+    privacyScoreEl.textContent = privacyResult.score;
+    privacyScoreEl.style.color = privacyResult.color;
+  }
+  if (privacyGradeBadgeEl) {
+    privacyGradeBadgeEl.textContent = privacyResult.grade;
+    privacyGradeBadgeEl.className = `grade-badge grade-${privacyResult.grade.toLowerCase()}`;
+  }
+  if (privacyRatingEl) {
+    privacyRatingEl.textContent = `Grade ${privacyResult.grade} · ${privacyResult.rating}`;
+  }
 }
 
 function renderAll() {
   updateDashboard();
   renderFeed();
   renderSiteAnalysis();
+  renderTrackerGraph(trackerGraphEl, events, activeSite);
 }
 
 // --- Load persisted history on open, then listen for live updates ---
@@ -134,6 +220,41 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
+// The side panel persists across navigations, but its in-memory `events`
+// array doesn't automatically know when background.js clears a tab's
+// history on navigation (chrome.webNavigation.onBeforeNavigate). Without
+// this, the panel would keep showing the PREVIOUS page's events for the
+// active tab until the panel itself was closed and reopened. Re-sync from
+// storage whenever the active tab starts a fresh navigation.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (tabId !== activeTabId) return;
+  if (changeInfo.status !== "loading") return;
+  getAllEvents().then((fresh) => {
+    events = fresh;
+    renderAll();
+  });
+});
+
+// If the user switches to a different tab, re-resolve activeSite/activeTabId
+// and refresh from storage so the panel reflects whichever tab is now active.
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.tabs.get(tabId, (tab) => {
+    if (!tab) return;
+    activeTabId = tab.id ?? null;
+    try {
+      const hostname = new URL(tab.url).hostname;
+      activeSite = getRegistrableDomain(hostname) || hostname;
+      siteNameEl.textContent = activeSite || "Unknown";
+    } catch {
+      siteNameEl.textContent = "Unknown";
+    }
+    getAllEvents().then((fresh) => {
+      events = fresh;
+      renderAll();
+    });
+  });
+});
+
 init();
 
 // --- Filter buttons ---
@@ -147,6 +268,27 @@ document.querySelectorAll(".filter").forEach((button) => {
   });
 });
 
+// --- Category filter buttons (independent of the severity filter above —
+// both are applied together in renderFeed) ---
+
+document.querySelectorAll(".category-filter").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".category-filter").forEach((btn) => btn.classList.remove("active"));
+    button.classList.add("active");
+    currentCategoryFilter = button.dataset.category;
+    renderFeed();
+  });
+});
+
+// --- Demo Mode: outlines events from tracker-lab test pages so they're
+// visually unambiguous during judging, without altering real-site behavior
+// when off. ---
+
+document.getElementById("demoModeToggle").addEventListener("change", (evt) => {
+  demoMode = evt.target.checked;
+  renderFeed();
+});
+
 // --- Clear button: clears persisted storage, not just this view ---
 
 document.getElementById("clearBtn").addEventListener("click", async () => {
@@ -155,28 +297,41 @@ document.getElementById("clearBtn").addEventListener("click", async () => {
   renderAll();
 });
 
-// --- Detect current site (for the header card only — the feed intentionally
-// shows activity across all sites, not just the active tab) ---
+// --- Detect current site (for the header card AND the tracker graph, which
+// is scoped to the active site — the feed intentionally still shows
+// activity across all sites). Uses the same eTLD+1 registrable-domain
+// logic the detectors use for event.site, so "www.example.com" in the
+// active tab correctly matches events recorded against "example.com". ---
 
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   if (!tabs || !tabs[0]) {
     siteNameEl.textContent = "Unknown";
     return;
   }
+  activeTabId = tabs[0].id ?? null;
   try {
-    siteNameEl.textContent = new URL(tabs[0].url).hostname || "Unknown";
+    const hostname = new URL(tabs[0].url).hostname;
+    activeSite = getRegistrableDomain(hostname) || hostname;
+    siteNameEl.textContent = activeSite || "Unknown";
+    renderAll();
   } catch {
     siteNameEl.textContent = "Unknown";
   }
 });
 
 // --- Export JSON: full canonical events, not just the display projection,
-// so the report is useful evidence rather than just UI labels ---
+// including holistic privacy scores, so the report is comprehensive evidence ---
 
 document.getElementById("jsonBtn").addEventListener("click", () => {
+  const tabEvents = activeTabId != null ? events.filter((e) => e.tabId === activeTabId) : events;
+  const currentSiteScore = calculatePrivacyScore(tabEvents);
+  const globalScore = calculatePrivacyScore(events);
+
   const report = {
     generatedAt: new Date().toISOString(),
     currentSite: siteNameEl.textContent,
+    privacyScore: currentSiteScore,
+    globalPrivacyScore: globalScore,
     trackerScore: Number(trackerScoreEl.textContent),
     totalEvents: events.length,
     events,
@@ -191,8 +346,5 @@ document.getElementById("jsonBtn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
-// --- PDF export: not yet implemented ---
-
-document.getElementById("pdfBtn").addEventListener("click", () => {
-  alert("PDF export will be added in the next step.");
-});
+// PDF export intentionally cut per team's non-negotiable scope decision
+// (docs — see PDF: "cut PDF export from MVP, it's not worth the hours").

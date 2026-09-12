@@ -44,7 +44,13 @@ async function getTopSiteForTab(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (!tab?.url) return null;
-    return getRegistrableDomain(new URL(tab.url).hostname);
+    const url = new URL(tab.url);
+    // See identical fix + rationale in background.js's getTopSiteForSenderTab —
+    // file:// pages have an empty hostname, which getRegistrableDomain()
+    // correctly returns as "", but that's falsy and would otherwise drop
+    // every network-layer event for a locally-opened tracker-lab page.
+    if (url.protocol === "file:") return "local-file";
+    return getRegistrableDomain(url.hostname) || null;
   } catch {
     return null;
   }

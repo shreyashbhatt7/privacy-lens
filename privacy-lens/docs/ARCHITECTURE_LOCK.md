@@ -321,3 +321,51 @@ event/severity breakdown from real data. The mock "TEST EVENTS" block
 (`sidepanel.js` section 12 in the original) was removed per its own
 in-code comment, since real detectors are now connected.
 
+---
+
+## Addendum: Phase 24–32 Confidence & Correlation Engine Integration
+
+In Phase 24–32, Person 3's Intelligence & Correlation Engine landed at
+`detection/confidence-engine.js`, `detection/scoring.js`, and
+`detection/classifier.js`. It activates inside `background.js` during the
+finalization of Person 2's fingerprint draft batches, replacing the initial
+placeholder confidence `0.0` with live forensic correlation scoring:
+
+1. **Temporal & Script Correlation Window**:
+   - Maintains a **10-second sliding correlation window** per `(site, tabId, scriptUrl)`
+     session context.
+   - Accurately distinguishes isolated benign operations (e.g. `WebGL.getParameter(MAX_TEXTURE_SIZE)`
+     or `screen.width` for responsive UI) from aggressive multi-vector fingerprinting.
+
+2. **Vector Weights, Diversity & Diminishing Returns**:
+   - **Vector Weights**:
+     - WebGL Unmasked GPU (`UNMASKED_RENDERER_WEBGL`, `UNMASKED_VENDOR_WEBGL`): `4.0`
+     - Silent Audio Fingerprinting (`OfflineAudioContext.startRendering`): `4.0`
+     - Canvas Readback (`toDataURL`, `toBlob`, `getImageData`): `3.0`
+     - Font Enumeration Loop (`FontFaceSet.check` loop): `3.0` (Single font check: `0.2`)
+     - Device Attribute Sweep ($\ge 3$ properties across `screen.*`/`navigator.*`): `2.5` (Single: `0.1`)
+     - WebGL Capability Check (`MAX_TEXTURE_SIZE`): `0.3` (Benign baseline)
+     - Outbound Beacon Exfiltration (`sendBeacon`, `fetch`, `XHR`): `3.5`
+   - **Diminishing Returns Formula**: Within the same vector group, subsequent calls
+     yield diminishing weight: $\text{additional} = \max(0, \text{weight} - \text{current} \times 0.4)$, capped at `8.0` per group.
+   - **Diversity Bonuses**: Multi-vector combinations apply diversity floors ($\ge 2$ vectors $\rightarrow \ge 0.55$, $\ge 3$ vectors $\rightarrow \ge 0.85$, $\ge 4$ vectors $\rightarrow \ge 0.90$).
+   - **Full Exfiltration Chain**: When a script gathers fingerprint vectors and initiates an outbound beacon/fetch/xhr within the 10s window, confidence rises to $\ge 0.95$ (`high` severity) with active exfiltration forensic notes.
+
+3. **Severity Threshold Alignment Across All Modules**:
+   - `high`: $\text{confidence} \ge 0.70$
+   - `medium`: $0.40 \le \text{confidence} < 0.70$
+   - `low`: $\text{confidence} < 0.40$
+   *(Now strictly consistent across Person 3's confidence engine and Person 1's network detectors: `etag-detector.js` scores 0.05–0.95 across reuse/spread; `cache-detector.js` scores immutable tokens at 0.75 [high] and long max-age tokens at 0.55 [medium]; `cname-detector.js` scores live DoH at 0.90 [high]; `thirdparty-detector.js` scores data beacons at 0.80 [high] and third-party loads at 0.55 [medium]).*
+
+4. **Probing Rate Multipliers**:
+   - $\text{count} > 5 \rightarrow 1.5\times$
+   - $2 \le \text{count} \le 5 \rightarrow 1.25\times$
+   - $\text{count} \le 1 \rightarrow 1.0\times$
+
+5. **Architectural Note — Dual Vantage Point on Outbound Beacons**:
+   - Outbound requests to tracker endpoints can be flagged from two complementary perspectives:
+     1. **DOM Hook (Person 2)**: Intercepts `navigator.sendBeacon` / `fetch` inside page context (`category: "fingerprinting"`, `subtype: "beacon"`, knowing caller `source.script`).
+     2. **Network Wiretap (Person 1)**: Intercepts requests via `chrome.webRequest` (`category: "network"`, `subtype: "beacon"` or `"third-party-load"`).
+   - This provides independent corroboration across the DOM/Network boundary. However, in `ui/sidepanel.js`, distinct `(category, subtype)` pairs count toward the aggregate `trackerScore`. If desired before demo freeze (Phase 40-44), a cross-layer deduplicator can bridge network events into the correlation engine.
+
+

@@ -16,7 +16,13 @@
             <p>Privacy & Tracking Monitor</p>
         </div>
 
-        <button id="clearBtn">Clear</button>
+        <div class="header-actions">
+            <label class="demo-toggle" title="Highlights events from tracker-lab test pages so they stand out during a live demo">
+                <input type="checkbox" id="demoModeToggle">
+                Demo Mode
+            </label>
+            <button id="clearBtn">Clear</button>
+        </div>
 
     </header>
 
@@ -30,9 +36,12 @@
             <h2 id="siteName">Waiting...</h2>
         </div>
 
-        <div class="score">
-            <span id="trackerScore">0</span>
-            <small>Trackers</small>
+        <div class="score" id="privacyScoreContainer" title="Holistic site privacy score (0-100) and letter grade (A-F)">
+            <div class="privacy-score-value">
+                <span id="privacyScore">100</span>
+                <span id="privacyGradeBadge" class="grade-badge grade-a">A</span>
+            </div>
+            <small id="privacyRating">Privacy Score</small>
         </div>
 
     </section>
@@ -41,6 +50,11 @@
     <!-- Statistics -->
 
     <section class="stats">
+
+        <div class="stat" id="trackerCountCard" title="Distinct tracking detection methods (category:subtype)">
+            <span id="trackerScore">0</span>
+            <p>Trackers</p>
+        </div>
 
         <div class="stat">
             <span id="totalEvents">0</span>
@@ -82,6 +96,30 @@
 
     </section>
 
+    <section class="filters category-filters">
+
+        <button class="category-filter active" data-category="ALL">
+            All types
+        </button>
+
+        <button class="category-filter" data-category="fingerprinting">
+            Fingerprint
+        </button>
+
+        <button class="category-filter" data-category="network">
+            Network
+        </button>
+
+        <button class="category-filter" data-category="identifier">
+            Identifier
+        </button>
+
+        <button class="category-filter" data-category="storage">
+            Storage
+        </button>
+
+    </section>
+
 
     <!-- Live Feed -->
 
@@ -106,6 +144,26 @@
         </div>
 
     </section>
+    <!-- Tracker Graph: site -> script -> third-party target -->
+
+<section class="tracker-graph">
+
+    <div class="feed-header">
+
+        <h3>Tracker Graph (current site)</h3>
+
+    </div>
+
+    <div id="trackerGraph">
+
+        <div class="empty">
+            No activity to graph yet.
+        </div>
+
+    </div>
+
+</section>
+
     <!-- Per-Site Analysis -->
 
 <section class="site-analysis">
@@ -133,10 +191,6 @@
 
         <button id="jsonBtn">
             Export JSON
-        </button>
-
-        <button id="pdfBtn">
-            Export PDF
         </button>
 
     </section>

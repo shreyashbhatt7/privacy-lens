@@ -84,3 +84,22 @@ If the correlation engine (Person 3) ever needs `source.script` universally
 present rather than the current per-detector key names (`requestDomain`,
 `url`, `requestHostname`, `script`), that's a separate, still-open
 refactor — not addressed here.
+
+---
+
+## Phase 24–32 Update: Confidence & Correlation Engine Evidence Fields
+
+With Person 3's Confidence Engine (`detection/confidence-engine.js`) wired into `background.js` during draft finalization, finalized fingerprint events now include additional forensic correlation metadata within the flat `evidence` object:
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `evidence.correlatedVectors` | `Array<string>` | Active vector groups detected for this script session within the 10s correlation window (e.g. `["canvas", "webgl", "audio", "beacon"]`). |
+| `evidence.forensicNotes` | `string` | Human-readable explanation of why the event was scored at its severity (e.g. `"Active Multi-Vector Exfiltration Chain -> [tracker.com] | Vectors: Canvas + WebGL (Unmasked GPU) + AudioContext"`). |
+| `evidence.count` | `number \| undefined` | Present if rapid polling occurred (`count > 1` within batch window). |
+
+### Severity and Confidence Agreement:
+- `high`: `confidence >= 0.70`
+- `medium`: `0.40 <= confidence < 0.70`
+- `low`: `confidence < 0.40`
+*(Both Person 1's network detectors and Person 3's confidence engine now use identical 0.40 / 0.70 severity thresholds).*
+

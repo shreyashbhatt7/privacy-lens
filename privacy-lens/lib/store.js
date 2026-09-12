@@ -46,6 +46,18 @@ export async function clearEvents() {
 }
 
 /**
+ * Clears only the events belonging to one tab — called on a fresh
+ * top-level navigation (including a plain reload) so a site's score
+ * reflects the current page load, not every visit since the browser
+ * session started.
+ */
+export async function clearEventsForTab(tabId) {
+  const { [EVENTS_KEY]: existing = [] } = await chrome.storage.session.get(EVENTS_KEY);
+  const remaining = existing.filter((e) => e.tabId !== tabId);
+  await chrome.storage.session.set({ [EVENTS_KEY]: remaining });
+}
+
+/**
  * Small persistent (not per-session) key/value map for cross-visit detector
  * state — e.g. "have we seen this ETag value from this domain before".
  * Uses chrome.storage.local so it survives browser restarts, which is the

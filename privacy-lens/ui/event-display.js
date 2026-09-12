@@ -58,6 +58,36 @@ export function severityUpper(event) {
 }
 
 /**
+ * Plain-English "why we flagged this" line. Fingerprint events already carry
+ * evidence.forensicNotes from the confidence engine (detection/confidence-engine.js).
+ * Network events (etag/cname/cache/thirdparty) don't go through that engine, so
+ * we build an equivalent one-liner here from their existing evidence fields —
+ * see docs/EVENT_SCHEMA_REFERENCE.md's per-detector table for what each has.
+ */
+export function evidenceSummaryFor(event) {
+  if (event.evidence?.forensicNotes) return event.evidence.forensicNotes;
+
+  const { subtype, evidence = {}, target } = event;
+  switch (subtype) {
+    case "etag":
+      return `Same identifier seen ${evidence.timesSeen}× across ${evidence.distinctSitesSeenOn} site(s)`;
+    case "cache-token":
+      return `Tracking token in ${evidence.pathLooksTokenized ? "URL path" : "cache header"}${
+        evidence.maxAgeSeconds ? `, cached ${evidence.maxAgeSeconds}s` : ""
+      }`;
+    case "cname-cloaking":
+      return `Looks first-party but resolves to ${target?.domain}${
+        evidence.cnameChain?.length ? ` via ${evidence.cnameChain.join(" → ")}` : ""
+      }`;
+    case "beacon":
+    case "third-party-load":
+      return `Outbound ${evidence.api ?? "request"} to ${target?.domain}`;
+    default:
+      return null;
+  }
+}
+
+/**
  * Full display-ready projection of a canonical TrackingEvent, for the feed
  * card and dashboard stats. Keeps the original event under `raw` so JSON
  * export can still include the full canonical record.
@@ -68,6 +98,10 @@ export function toDisplayEvent(event) {
     type: typeLabelFor(event),
     domain: domainFor(event),
     severity: severityUpper(event),
+    confidence: typeof event.confidence === "number" ? event.confidence : null,
+    evidenceSummary: evidenceSummaryFor(event),
+    correlatedVectors: event.evidence?.correlatedVectors ?? null,
+    crossLayerConfirmed: event.crossLayerConfirmed === true,
     timestamp: event.timestamp,
     site: event.site ?? null,
   };

@@ -42,13 +42,16 @@
     if (buffer.length === 0) return;
     const batchPayload = buffer.map(({ _key, ...eventData }) => eventData);
     buffer = [];
-    if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.BATCH_EVENTS,
-        payload: batchPayload,
-        events: batchPayload
-      }).catch(() => {
-      });
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime?.id && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({
+          type: MESSAGE_TYPES.BATCH_EVENTS,
+          payload: batchPayload,
+          events: batchPayload
+        }).catch(() => {
+        });
+      }
+    } catch (err) {
     }
   }
   if (typeof window !== "undefined") {

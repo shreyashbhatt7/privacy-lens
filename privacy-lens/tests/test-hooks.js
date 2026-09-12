@@ -19,6 +19,7 @@ global.window.postMessage = (msg) => {
 // Mock Chrome runtime for content-bridge
 global.chrome = {
   runtime: {
+    id: 'mock-extension-id', // real, non-invalidated contexts always have this set
     sendMessage: (msg) => {
       relayedExtensionMessages.push(msg);
       return Promise.resolve({ received: true });

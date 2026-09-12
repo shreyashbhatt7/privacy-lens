@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.js",
     "watch": "node build.js --watch",
-    "test": "node tests/test-hooks.js"
+    "test": "node tests/test-hooks.js && node tests/test-confidence-engine.js && node tests/test-event-display.js && node tests/test-correlate.js && node tests/test-graph.js && node tests/test-privacy-score.js"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

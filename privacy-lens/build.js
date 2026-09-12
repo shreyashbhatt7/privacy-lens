@@ -18,6 +18,14 @@ const buildOptions = [
     outfile: 'dist/content-bridge.bundle.js',
     sourcemap: true,
     target: ['chrome111']
+  },
+  {
+    entryPoints: ['background.js'],
+    bundle: true,
+    format: 'iife',
+    outfile: 'dist/background.bundle.js',
+    sourcemap: true,
+    target: ['chrome111']
   }
 ];
 

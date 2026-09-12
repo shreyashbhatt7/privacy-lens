@@ -52,7 +52,10 @@ export async function inspectCacheHeaders({ url, cacheControlHeader, topSite, ta
   if (!looksLikeToken) return; // long cache on e.g. /logo.png alone isn't suspicious
 
   const requestDomain = new URL(url).hostname;
-  const confidence = immutable ? 0.55 : 0.4;
+  // Immutable cache tokens permanently bypass revalidation and act as supercookies -> high confidence (0.75).
+  // Standard long max-age cache tokens -> medium confidence (0.55).
+  const confidence = immutable ? 0.75 : 0.55;
+  const severity = confidence >= 0.7 ? "high" : confidence >= 0.4 ? "medium" : "low";
 
   const event = createTrackingEvent({
     tabId,
@@ -67,7 +70,7 @@ export async function inspectCacheHeaders({ url, cacheControlHeader, topSite, ta
       maxAgeSeconds: maxAge,
       pathLooksTokenized: true,
     },
-    severity: confidence >= 0.5 ? "medium" : "low",
+    severity,
     confidence,
   });
 

@@ -8,14 +8,14 @@
     "storage",
     "sidePanel",
     "declarativeNetRequest",
-    "tabs"
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "dist/background.bundle.js"
   },
   "content_scripts": [
     {

@@ -43,6 +43,6 @@ npm run build     # bundles fingerprint/main-world.js and content/content-bridge
 ## Tests
 
 ```
-npm test    # node tests/test-hooks.js — fingerprint hook + batching/dedup checks
-node tests/test-event-display.js   # canonical event -> UI display mapping checks
+npm test    # runs test-hooks.js, test-confidence-engine.js, and test-event-display.js
+node tests/test-confidence-engine.js  # Phase 24-32 Confidence Engine & Signal Combination tests
 ```
